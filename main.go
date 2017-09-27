@@ -59,10 +59,11 @@ func main() {
 	for s.Scan() {
 		lock.Lock()
 		for _, sock := range cons {
-			_, err := (*sock).Write(s.Bytes())
+			_, err := fmt.Fprintln(*sock, s.Text())
 			if nil != err {
 				(*sock).Close()
 				delete(cons, sock)
+				continue
 			}
 		}
 		lock.Unlock()
