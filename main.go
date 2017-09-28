@@ -8,6 +8,7 @@ import (
 	"time"
 	"fmt"
 	"log"
+	"./endpoints"
 )
 
 var cons = map[*net.Conn]*net.Conn{}
@@ -30,7 +31,7 @@ var s *bufio.Scanner
 
 func main() {
 	listening = false
-	var data = make(chan string)
+	go endpoints.StartListening()
 begin:
 	con, err = net.Dial("tcp", *lib.Addr)
 	if nil != err {
@@ -60,21 +61,9 @@ begin:
 	}()
 
 	s = bufio.NewScanner(lib.GetConn())
-	go func() {
-		for s.Scan() {
-			data <- s.Text()
-		}
-	}()
-	for {
-		var dt string
-		select {
-		case dt = <-data:
-		case <-time.After(time.Second * 3):
-			log.Println("\nprobably the connection was lost no reply for 3000 milliseconds")
-			lib.GetConn().Close()
-			time.Sleep(time.Second)
-			goto begin
-		}
+
+	for s.Scan() {
+		var dt = s.Text()
 
 		lock.Lock()
 		for _, sock := range cons {
@@ -87,8 +76,7 @@ begin:
 		}
 		lock.Unlock()
 	}
+	time.Sleep(time.Second*5)
 	log.Println("\nbetradar connection was interrrupted restarting")
-	lib.GetConn().Close()
-	time.Sleep(time.Second)
 	goto begin
 }
