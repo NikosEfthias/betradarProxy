@@ -4,6 +4,7 @@ import "fmt"
 import (
 	"net"
 	"encoding/xml"
+	"./lib"
 )
 
 type Ask struct {
@@ -34,6 +35,6 @@ func AskWithValues(id string, tp string, ts int64, key string) *Ask {
 	}
 }
 func Login(sock net.Conn) {
-	AskWithValues(*id, "login", 0, *key).Send(sock)
+	AskWithValues(*lib.Id, "login", 0, *lib.Key).Send(sock)
 	sock.Write([]byte("<StartAuto/>\n"))
 }

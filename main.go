@@ -1,7 +1,7 @@
 package main
 
 import (
-	"flag"
+	"./lib"
 	"net"
 	"bufio"
 	"sync"
@@ -10,12 +10,6 @@ import (
 	"log"
 )
 
-var (
-	addr *string
-	port *string
-	key  *string
-	id   *string
-)
 var cons = map[*net.Conn]*net.Conn{}
 var lock sync.Mutex
 
@@ -27,11 +21,6 @@ func init() {
 			fmt.Printf("\r\x1B[32mConnected Users (%d)\x1B[0m", len(cons))
 		}
 	}()
-	addr = flag.String("h", "", "host [betradar url]")
-	port = flag.String("p", "1111", "port to listen")
-	key = flag.String("k", "", "betradar key")
-	id = flag.String("id", "", "betradar id")
-	flag.Parse()
 }
 
 var con net.Conn
@@ -43,18 +32,19 @@ func main() {
 	listening = false
 	var data = make(chan string)
 begin:
-	con, err = net.Dial("tcp", *addr)
+	con, err = net.Dial("tcp", *lib.Addr)
 	if nil != err {
 		panic(err)
 	}
-	Login(con)
+	lib.SetConn(con)
+	Login(lib.GetConn())
 	go func() {
 		if listening {
 			return
 		}
 		listening = true
-		fmt.Println("listening on port", *port)
-		l, err := net.Listen("tcp", ":" + *port)
+		fmt.Println("listening on port", *lib.Port)
+		l, err := net.Listen("tcp", ":" + *lib.Port)
 		if nil != err {
 			panic(err)
 		}
@@ -69,7 +59,7 @@ begin:
 		}
 	}()
 
-	s = bufio.NewScanner(con)
+	s = bufio.NewScanner(lib.GetConn())
 	go func() {
 		for s.Scan() {
 			data <- s.Text()
@@ -81,7 +71,7 @@ begin:
 		case dt = <-data:
 		case <-time.After(time.Second * 3):
 			log.Println("\nprobably the connection was lost no reply for 3000 milliseconds")
-			con.Close()
+			lib.GetConn().Close()
 			time.Sleep(time.Second)
 			goto begin
 		}
@@ -98,7 +88,7 @@ begin:
 		lock.Unlock()
 	}
 	log.Println("\nbetradar connection was interrrupted restarting")
-	con.Close()
+	lib.GetConn().Close()
 	time.Sleep(time.Second)
 	goto begin
 }
