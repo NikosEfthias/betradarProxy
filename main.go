@@ -33,13 +33,26 @@ func init() {
 	id = flag.String("id", "", "betradar id")
 	flag.Parse()
 }
+
+var con net.Conn
+var err error
+var listening bool
+var s *bufio.Scanner
+
 func main() {
-	con, err := net.Dial("tcp", *addr)
+	listening = false
+	var data = make(chan string)
+begin:
+	con, err = net.Dial("tcp", *addr)
 	if nil != err {
 		panic(err)
 	}
 	Login(con)
 	go func() {
+		if listening {
+			return
+		}
+		listening = true
 		fmt.Println("listening on port", *port)
 		l, err := net.Listen("tcp", ":" + *port)
 		if nil != err {
@@ -55,11 +68,27 @@ func main() {
 			lock.Unlock()
 		}
 	}()
-	s := bufio.NewScanner(con)
-	for s.Scan() {
+
+	s = bufio.NewScanner(con)
+	go func() {
+		for s.Scan() {
+			data <- s.Text()
+		}
+	}()
+	for {
+		var dt string
+		select {
+		case dt = <-data:
+		case <-time.After(time.Second * 3):
+			log.Println("\nprobably the connection was lost no reply for 3000 milliseconds")
+			con.Close()
+			time.Sleep(time.Second)
+			goto begin
+		}
+
 		lock.Lock()
 		for _, sock := range cons {
-			_, err := fmt.Fprintln(*sock, s.Text())
+			_, err := fmt.Fprintln(*sock, dt)
 			if nil != err {
 				(*sock).Close()
 				delete(cons, sock)
@@ -68,5 +97,8 @@ func main() {
 		}
 		lock.Unlock()
 	}
-	log.Fatalln("\nbetradar connection was interrrupted")
+	log.Println("\nbetradar connection was interrrupted restarting")
+	con.Close()
+	time.Sleep(time.Second)
+	goto begin
 }
