@@ -19,6 +19,11 @@ func sendToBetradar() *http.ServeMux {
 			key    string = r.Form.Get("key")
 			data   string = r.Form.Get("data")
 		)
+		if origin == "" || key == "" || data == "" {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("missing key origin or data fields"))
+			return
+		}
 		if !models.CheckOk(origin, key) {
 			w.WriteHeader(http.StatusForbidden)
 			w.Write([]byte("unauthorized"))

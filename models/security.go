@@ -22,7 +22,9 @@ func init() {
 	Model.AutoMigrate(&Origin{})
 }
 func CheckOk(org string, key string) bool {
-	_ = key //not implemented yet
+	if org == "" || key == "" {
+		return false
+	}
 	out := new(Origin)
 	Model.Where(&Origin{ID: org, Password: key, Admin: true}).First(out)
 	if out.ID != org {
