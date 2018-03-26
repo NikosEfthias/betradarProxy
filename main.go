@@ -1,14 +1,16 @@
 package main
 
 import (
-	"./lib"
-	"net"
 	"bufio"
-	"sync"
-	"time"
 	"fmt"
 	"log"
+	"net"
+	"os"
+	"sync"
+	"time"
+
 	"./endpoints"
+	"./lib"
 )
 
 var cons = map[*net.Conn]*net.Conn{}
@@ -32,7 +34,6 @@ var s *bufio.Scanner
 func main() {
 	listening = false
 	go endpoints.StartListening()
-begin:
 	con, err = net.Dial("tcp", *lib.Addr)
 	if nil != err {
 		panic(err)
@@ -45,7 +46,7 @@ begin:
 		}
 		listening = true
 		fmt.Println("listening on port", *lib.Port)
-		l, err := net.Listen("tcp", ":" + *lib.Port)
+		l, err := net.Listen("tcp", ":"+*lib.Port)
 		if nil != err {
 			panic(err)
 		}
@@ -61,9 +62,22 @@ begin:
 	}()
 
 	s = bufio.NewScanner(lib.GetConn())
-
-	for s.Scan() {
-		var dt = s.Text()
+	var scanChan = make(chan string)
+	go func() {
+		for s.Scan() {
+			scanChan <- s.Text()
+		}
+		time.Sleep(time.Second * 5)
+		log.Println("\nbetradar connection was interrrupted restarting")
+	}()
+	for {
+		var dt string
+		select {
+		case dt = <-scanChan:
+		case <-time.After(time.Minute):
+			fmt.Println("no data for a minute restarting")
+			os.Exit(0)
+		}
 
 		lock.Lock()
 		for _, sock := range cons {
@@ -76,7 +90,4 @@ begin:
 		}
 		lock.Unlock()
 	}
-	time.Sleep(time.Second*5)
-	log.Println("\nbetradar connection was interrrupted restarting")
-	goto begin
 }
