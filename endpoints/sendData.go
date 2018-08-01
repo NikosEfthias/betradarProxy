@@ -1,12 +1,13 @@
 package endpoints
 
 import (
-	"net/http"
-	"../lib"
 	"net"
+	"net/http"
 	"time"
-	"../models"
-	"fmt"
+
+	"../lib"
+	"github.com/k0kubun/pp"
+	"github.com/mugsoft/tools"
 )
 
 func sendToBetradar() *http.ServeMux {
@@ -15,20 +16,8 @@ func sendToBetradar() *http.ServeMux {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		var (
-			origin string = r.Form.Get("origin")
-			key    string = r.Form.Get("key")
-			data   string = r.Form.Get("data")
+			data string = r.Form.Get("data")
 		)
-		if origin == "" || key == "" || data == "" {
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("missing key origin or data fields"))
-			return
-		}
-		if !models.CheckOk(origin, key) {
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("unauthorized"))
-			return
-		}
 		if data == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte("empty data"))
@@ -40,7 +29,10 @@ func sendToBetradar() *http.ServeMux {
 			time.Sleep(time.Millisecond * 100)
 			goto checkAgain
 		}
-		fmt.Fprintln(con, data)
+		length := tools.Int2LE(uint(len([]byte(data))))
+		pp.Println(length, data)
+		con.Write(length[:])
+		con.Write([]byte(data))
 	})
 	return mux
 }

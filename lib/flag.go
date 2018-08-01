@@ -6,18 +6,16 @@ var (
 	Addr    *string
 	Port    *string
 	Key     *string
-	Id      *string
-	Db      *string
+	Pass    *string
 	ApiPort *string
 )
 
 func init() {
-	Addr = flag.String("h", "", "host [betradar url]")
+	Addr = flag.String("h", "odds-stream-test.betconstruct.com:8077", "host [betconstruct url]")
 	Port = flag.String("p", "1111", "socket port to listen")
 	ApiPort = flag.String("ap", "2222", "api port to listen")
-	Key = flag.String("k", "", "betradar key")
-	Id = flag.String("id", "", "betradar id")
-	Db = flag.String("db", "root:@tcp(127.0.0.1:3306)/test", "Database Address to use")
+	Key = flag.String("k", "", "login name")
+	Pass = flag.String("pass", "", "betconstruct Password")
 	if !flag.Parsed() {
 		flag.Parse()
 	}
