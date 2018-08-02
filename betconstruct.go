@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"time"
 
@@ -21,7 +20,6 @@ func (l *Command) Send(sock net.Conn) error {
 	if nil != err {
 		return err
 	}
-	fmt.Println(string(d))
 	ln := tools.Int2LE(uint(len(d)))
 	_, err = sock.Write(ln[:])
 	if nil != err {
@@ -61,7 +59,7 @@ func Login(sock net.Conn) {
 	go func() {
 		for {
 			(&Command{Command: "HeartBeat"}).Send(lib.GetConn())
-			time.Sleep(time.Second * 3)
+			time.Sleep(time.Second * 5)
 		}
 	}()
 }

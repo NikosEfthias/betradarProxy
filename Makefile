@@ -1,10 +1,10 @@
 start:betconstructProxy.bin
 	./start.sh
 
-betconstructProxy.bin:main.go betconstruct.go
+betconstructProxy.bin:main.go betconstruct.go helperFuncs.go
 	go build -o $@ $^
 
-proxy.linux:main.go betconstruct.go
+proxy.linux:main.go betconstruct.go helperFuncs.go
 	GOOS=linux go build -o $@ $^
 .PHONY:deploy
 deploy:proxy.linux

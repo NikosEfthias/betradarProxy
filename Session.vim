@@ -7,10 +7,11 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
 set shortmess=aoO
-badd +1 ~/projects/betradarProxy/main.go
-badd +8 ~/projects/betradarProxy/Makefile
+badd +57 ~/projects/betradarProxy/main.go
+badd +61 ~/projects/betradarProxy/betconstruct.go
 argglobal
 silent! argdel *
+$argadd main.go
 edit ~/projects/betradarProxy/main.go
 set splitbelow splitright
 wincmd t
@@ -24,12 +25,12 @@ setlocal fdl=0
 setlocal fml=1
 setlocal fdn=20
 setlocal nofen
-let s:l = 44 - ((22 * winheight(0) + 27) / 54)
+let s:l = 112 - ((13 * winheight(0) + 8) / 16)
 if s:l < 1 | let s:l = 1 | endif
 exe s:l
 normal! zt
-44
-normal! 05|
+112
+normal! 043|
 tabnext 1
 if exists('s:wipebuf') && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
   silent exe 'bwipe ' . s:wipebuf
