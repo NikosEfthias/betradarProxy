@@ -10,8 +10,16 @@ import (
 	"time"
 
 	"./lib"
+	"github.com/k0kubun/pp"
 	"github.com/mugsoft/tools"
+	"github.com/mugsoft/tools/bytesize"
 )
+
+type conStruct struct {
+	sync.Mutex
+	con             *net.Conn
+	lastSendSuccess time.Time
+}
 
 var (
 	loadingConsEnd = make(chan bool)
@@ -21,8 +29,7 @@ var (
 	listening      bool
 	s              *bufio.Scanner
 	scanChan       = make(chan []byte)
-	data           []byte
-	cons           = map[*net.Conn]*net.Conn{}
+	cons           = map[*net.Conn]*conStruct{}
 )
 
 func startServer() {
@@ -42,14 +49,14 @@ func startServer() {
 			<-dataEnd
 			bufferLock.Lock()
 			for _, cn := range conBuffer {
-				cons[cn] = cn
+				cons[cn] = &conStruct{con: cn}
+				go handlePing(cn)
 			}
 			conBuffer = conBuffer[:0]
 			bufferLock.Unlock()
 			loadingConsEnd <- true
 		}
 	}()
-	dataEnd <- true
 	for {
 		con, err := l.Accept()
 		if nil != err {
@@ -69,34 +76,62 @@ func Connect() net.Conn {
 	return con
 
 }
+
+var buffering = false
+
+var store_lock sync.Mutex
+
 func readData() {
+	const bufsize = 1024
+	var buf = make([]byte, bufsize)
+	var firstTime = true
+	var fullData = []byte{}
+	var parsed = map[string]interface{}{}
+	_, _ = fullData, parsed
 	for {
-		<-loadingConsEnd
+		if !firstTime {
+			<-loadingConsEnd
+		} else {
+			firstTime = false
+		}
 		var length int
 		var remaining int
 		var meta = make([]byte, 4)
 		n, err := lib.GetConn().Read(meta)
 		if nil != err {
-			log.Fatalln(err)
+			pp.Println(err)
+			break
 		} else if n < 4 {
 			fmt.Println("Erroorrr they sent less bytes ")
 			continue
 		}
-		scanChan <- meta
+		// scanChan <- meta
 		length = int(tools.LE2Int(meta))
 		remaining = length
-
-		if len(data) < remaining {
-			data = make([]byte, remaining)
+		for remaining > 0 {
+			buffering = true
+			if uint64(length) > bytesize.MB*30 {
+				pp.Println(">>", remaining, len(buf))
+			}
+			if remaining < len(buf) {
+				buf = buf[:remaining]
+			} else if remaining > bufsize && len(buf) < bufsize {
+				buf = make([]byte, bufsize)
+			}
+			n, _ = lib.GetConn().Read(buf)
+			remaining -= n
+			// scanChan <- buf[:n]
+			fullData = append(fullData, buf[:n]...)
 		}
-	readMore:
-		n, _ = lib.GetConn().Read(data[:remaining])
-		remaining -= n
-		scanChan <- data[:n]
-		if remaining > 0 {
-			goto readMore
-		}
+		buffering = false
+		scanChan <- fullData
+		scanChan <- []byte{'\n'}
 		dataEnd <- true
+
+		// if err := json.Unmarshal(fullData, &parsed); nil != err {
+		// 	pp.Println("errored json", err.Error())
+		// }
+		fullData = fullData[:0]
 	}
 	time.Sleep(time.Second * 11)
 	log.Println("\nbetconstruct connection was interrrupted restarting")
@@ -108,18 +143,66 @@ func broadcast() {
 		select {
 		case dt = <-scanChan:
 		case <-time.After(time.Second * 11):
+			if buffering {
+				continue
+			}
 			fmt.Println("no data for 11 seconds restarting")
 			os.Exit(1)
 		}
-
+		var cpy = make([]byte, len(dt))
+		copy(cpy, dt)
 		for _, sock := range cons {
-			_, err := (*sock).Write(dt)
-			if nil != err {
-				(*sock).Close()
-				delete(cons, sock)
-				continue
-			}
+			go func(data []byte, sock *conStruct) {
+				// if sock.lastSendSuccess.Unix() != 0 && sock.lastSendSuccess.Unix() < time.Now().Unix()-int64(time.Minute) {
+				// 	(*sock.con).Close()
+				// 	store_lock.Lock()
+				// 	delete(cons, sock.con)
+				// 	store_lock.Unlock()
+				// 	return
+				// }
+				_, err := (*sock.con).Write(data)
+				if nil != err {
+					store_lock.Lock()
+					delete(cons, sock.con)
+					store_lock.Unlock()
+					(*sock.con).Close()
+				}
+			}(cpy, sock)
 		}
 	}
+}
+func handlePing(cn *net.Conn) {
+	dataCH := make(chan bool)
+	data := make([]byte, 20)
+	pp.Println(len(cons))
+	go func() {
+		defer func() {
+			store_lock.Lock()
+			delete(cons, cn)
+			store_lock.Unlock()
+			(*cn).Close()
+			pp.Println(len(cons))
+		}()
+		for {
+			select {
+			case <-dataCH:
+				continue
+			case <-time.After(time.Second * 15):
+				return
+			}
+		}
+		return
+	}()
 
+	for {
+		n, err := (*cn).Read(data)
+		if n == 0 || nil != err {
+			store_lock.Lock()
+			delete(cons, cn)
+			store_lock.Unlock()
+			(*cn).Close()
+			return
+		}
+		dataCH <- true
+	}
 }
