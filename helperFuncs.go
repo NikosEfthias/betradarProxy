@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -82,7 +84,7 @@ var buffering = false
 var store_lock sync.Mutex
 
 func readData() {
-	const bufsize = 1024
+	const bufsize = bytesize.MB
 	var buf = make([]byte, bufsize)
 	var firstTime = true
 	var fullData = []byte{}
@@ -97,6 +99,7 @@ func readData() {
 		var length int
 		var remaining int
 		var meta = make([]byte, 4)
+		fullData = fullData[:0]
 		n, err := lib.GetConn().Read(meta)
 		if nil != err {
 			pp.Println(err)
@@ -115,7 +118,7 @@ func readData() {
 			}
 			if remaining < len(buf) {
 				buf = buf[:remaining]
-			} else if remaining > bufsize && len(buf) < bufsize {
+			} else if remaining > int(bufsize) && len(buf) < int(bufsize) {
 				buf = make([]byte, bufsize)
 			}
 			n, _ = lib.GetConn().Read(buf)
@@ -123,15 +126,58 @@ func readData() {
 			// scanChan <- buf[:n]
 			fullData = append(fullData, buf[:n]...)
 		}
-		buffering = false
-		scanChan <- fullData
-		scanChan <- []byte{'\n'}
+		var data = map[string]interface{}{}
+		err = json.Unmarshal(fullData, &data)
+		if nil != err {
+			log__file("errored_json.json", os.Stderr, string(fullData))
+			dataEnd <- true
+			continue
+		}
+		cmd, ok := data["Command"]
+		if !ok || cmd == nil {
+			log__file("no__command.json", os.Stderr, string(fullData))
+			dataEnd <- true
+			continue
+		}
+		_objects, ok := data["Objects"]
+		if !ok {
+			scanChan <- append(fullData, []byte("\r\n")...)
+			if cmd != "HeartBeat" {
+				log__file("no__objects.json", os.Stderr, string(fullData))
+			}
+			dataEnd <- true
+			continue
+		}
+		objects, ok := _objects.([]interface{})
+		if !ok {
+			scanChan <- append(fullData, []byte("\r\n")...)
+			dataEnd <- true
+			continue
+		}
+		var numMap = map[int]bool{
+			len(objects) - 1: true,
+		}
+		for i, obj := range objects {
+			stringified, err := json.Marshal(map[string]interface{}{
+				"Command": cmd,
+				"Objects": []interface{}{obj},
+				"Stat":    data["Stat"],
+				"Error":   data["Error"],
+				"Type":    data["Type"],
+				"Done":    numMap[i],
+			})
+			if nil != err {
+				log__file("err.log", os.Stderr, err.Error())
+				continue
+			}
+			scanChan <- append(stringified, []byte("\r\n")...)
+		}
 		dataEnd <- true
+		buffering = false
 
 		// if err := json.Unmarshal(fullData, &parsed); nil != err {
 		// 	pp.Println("errored json", err.Error())
 		// }
-		fullData = fullData[:0]
 	}
 	time.Sleep(time.Second * 11)
 	log.Println("\nbetconstruct connection was interrrupted restarting")
@@ -142,15 +188,13 @@ func broadcast() {
 		var dt []byte
 		select {
 		case dt = <-scanChan:
-		case <-time.After(time.Second * 11):
+		case <-time.After(time.Second * 50):
 			if buffering {
 				continue
 			}
-			fmt.Println("no data for 11 seconds restarting")
+			fmt.Println("no data for 50 seconds restarting")
 			os.Exit(1)
 		}
-		var cpy = make([]byte, len(dt))
-		copy(cpy, dt)
 		for _, sock := range cons {
 			go func(data []byte, sock *conStruct) {
 				// if sock.lastSendSuccess.Unix() != 0 && sock.lastSendSuccess.Unix() < time.Now().Unix()-int64(time.Minute) {
@@ -167,7 +211,7 @@ func broadcast() {
 					store_lock.Unlock()
 					(*sock.con).Close()
 				}
-			}(cpy, sock)
+			}(dt, sock)
 		}
 	}
 }
@@ -205,4 +249,14 @@ func handlePing(cn *net.Conn) {
 		}
 		dataCH <- true
 	}
+}
+func log__file(fname string, fallback io.Writer, data ...interface{}) {
+	file, err := os.OpenFile(fname, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0777)
+	if nil != err {
+		fmt.Fprintln(fallback, data...)
+		return
+	}
+	fmt.Fprintln(file, data...)
+	file.Close()
+
 }

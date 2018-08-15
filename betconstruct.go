@@ -37,25 +37,25 @@ func LoginWithValues(uname string, pass string) *Command {
 }
 func Login(sock net.Conn) {
 	LoginWithValues(*lib.Key, *lib.Pass).Send(sock)
-	var cmds = []*Command{
-		{
-			Command: "GetSports",
-		},
-		{
-			Command: "GetRegions",
-		},
-		{
-			Command: "GetCompetitions",
-		},
-		{
-			Command: "GetMarketTypes",
-			Params:  []map[string]interface{}{{}},
-		},
-	}
-	for _, cmd := range cmds {
-		// time.Sleep(time.Second)
-		cmd.Send(sock)
-	}
+	// var cmds = []*Command{
+	// 	{
+	// 		Command: "GetSports",
+	// 	},
+	// 	{
+	// 		Command: "GetRegions",
+	// 	},
+	// 	{
+	// 		Command: "GetCompetitions",
+	// 	},
+	// 	{
+	// 		Command: "GetMarketTypes",
+	// 		Params:  []map[string]interface{}{{}},
+	// 	},
+	// }
+	// for _, cmd := range cmds {
+	// 	// time.Sleep(time.Second)
+	// 	cmd.Send(sock)
+	// }
 	go func() {
 		for {
 			(&Command{Command: "HeartBeat"}).Send(lib.GetConn())
